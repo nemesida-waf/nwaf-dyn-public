@@ -5,6 +5,10 @@
 #include <ngx_core.h>
 #include <ngx_http.h>
 
+#if (NGX_HTTP_V3 && NGX_QUIC_OPENSSL_COMPAT)
+#include <ngx_event_quic_openssl_compat.h>
+#endif
+
 #define  NGX_HTTP_PROXY_COOKIE_SECURE           0x0001
 #define  NGX_HTTP_PROXY_COOKIE_SECURE_ON        0x0002
 #define  NGX_HTTP_PROXY_COOKIE_SECURE_OFF       0x0004
@@ -118,6 +122,13 @@ typedef struct {
     ngx_str_t                      ssl_crl;
     ngx_array_t                   *ssl_conf_commands;
 #endif
+
+#if (NGX_HTTP_V3)
+    ngx_str_t                      host;
+    ngx_uint_t                     host_set;
+    ngx_flag_t                     enable_hq;
+    ngx_uint_t                     max_table_capacity_set;
+#endif
 } ngx_http_proxy_loc_conf_t;
 
 
@@ -130,10 +141,75 @@ typedef struct {
     ngx_chain_t                   *free;
     ngx_chain_t                   *busy;
 
+    ngx_buf_t                     *trailers;
+
+#if (NGX_HTTP_V3)
+    ngx_str_t                      host;
+    ngx_http_v3_parse_t           *v3_parse;
+    size_t                         data_recvd;
+#endif
+
     unsigned                       head:1;
     unsigned                       internal_chunked:1;
     unsigned                       header_sent:1;
 } ngx_http_proxy_ctx_t;
+
+#if (NGX_HTTP_V3)
+
+/* context for creating http/3 request */
+typedef struct {
+    /* calculated length of request */
+    size_t                         n;
+
+    /* encode method state */
+    ngx_str_t                      method;
+
+    /* encode path state */
+    size_t                         loc_len;
+    size_t                         uri_len;
+    uintptr_t                      escape;
+    ngx_uint_t                     unparsed_uri;
+
+    /* encode headers state */
+    size_t                         max_head;
+    ngx_http_proxy_headers_t      *headers;
+    ngx_http_script_engine_t       le;
+    ngx_http_script_engine_t       e;
+
+} ngx_http_v3_proxy_ctx_t;
+
+#endif
+
+typedef struct ngx_http_header_val_s  ngx_http_header_val_t;
+
+typedef ngx_int_t (*ngx_http_set_header_pt)(ngx_http_request_t *r,
+  ngx_http_header_val_t *hv, ngx_str_t *value);
+
+struct ngx_http_header_val_s {
+  ngx_http_complex_value_t   value;
+  ngx_str_t                  key;
+  ngx_http_set_header_pt     handler;
+  ngx_uint_t                 offset;
+  ngx_uint_t                 always;  /* unsigned  always:1 */
+};
+
+typedef enum {
+  NGX_HTTP_EXPIRES_OFF,
+  NGX_HTTP_EXPIRES_EPOCH,
+  NGX_HTTP_EXPIRES_MAX,
+  NGX_HTTP_EXPIRES_ACCESS,
+  NGX_HTTP_EXPIRES_MODIFIED,
+  NGX_HTTP_EXPIRES_DAILY,
+  NGX_HTTP_EXPIRES_UNSET
+} ngx_http_expires_t;
+
+typedef struct {
+  ngx_http_expires_t         expires;
+  time_t                     expires_time;
+  ngx_http_complex_value_t  *expires_value;
+  ngx_array_t               *headers;
+  ngx_array_t               *trailers;
+} ngx_http_headers_conf_t;
 
 void ngx_http_upstream_finalize_request(ngx_http_request_t *r, ngx_http_upstream_t *u, ngx_int_t rc);
 
