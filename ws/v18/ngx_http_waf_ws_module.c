@@ -2373,9 +2373,12 @@ static void ngx_http_upstream_send_response(ngx_http_request_t *r, ngx_http_upst
         p->buf_to_file->temporary = 1;
     }
 
+#if defined(NGX_USE_IOCP_EVENT)
+    /* nginx 1.31.8 removed the Win32 IOCP event module, this flag, and pipe.single_buf. */
     if (ngx_event_flags & NGX_USE_IOCP_EVENT) {
         p->single_buf = 1;
     }
+#endif
 
     p->free_bufs = 1;
 
